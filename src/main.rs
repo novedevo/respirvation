@@ -1,5 +1,10 @@
-use glium::{implement_vertex, program::ProgramCreationInput, Surface, VertexBuffer};
+use beeswarmers::beeswarm_greedy;
+use glium::{implement_vertex, program::ProgramCreationInput, Surface, VertexBuffer, uniform};
+use rand::prelude::*;
+use rand_distr::Uniform;
 use winit::dpi::*;
+
+const POINT_RADIUS_BEES: f32 = 1.0 / 20.0;
 
 fn main() {
     let event_loop = glium::winit::event_loop::EventLoop::builder()
@@ -11,16 +16,34 @@ fn main() {
     window.set_resizable(false);
     window.set_title("meowmeowmeow");
 
-    let points = (-2..=2)
+    //generate random points
+    let mut rng = rand::rng();
+    let normal = rand_distr::Normal::new(0.0, 0.4).unwrap();
+    let uniform = Uniform::new(-0.7, -0.3).unwrap();
+    let mut points = normal
+        .sample_iter(rng.clone())
+        .take(100)
+        .collect::<Vec<f64>>();
+
+    points.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    let jittered_vertices = points
+        .iter()
         .map(|pt| Vertex {
-            position: [pt as f32 / 2.0, 0.0],
+            position: [pt.clamp(-1.0, 1.0), uniform.sample(&mut rng)],
         })
-        .chain((-2..=2).map(|pt| Vertex {
-            position: [0.0, pt as f32 / 2.0],
-        }))
         .collect::<Vec<_>>();
 
-    let vertex_buffer = VertexBuffer::new(&display, &points).unwrap();
+    let bees = beeswarm_greedy(points.as_slice(), 1.0 / 20.0);
+    let bee_vertices = bees
+        .into_iter()
+        .map(|position: [f64; 2]| Vertex {
+            position: [position[0], position[1] + 0.5],
+        })
+        .collect::<Vec<_>>();
+
+    let bee_vertex_buffer = VertexBuffer::new(&display, &bee_vertices).unwrap();
+    let jitter_vertex_buffer = VertexBuffer::new(&display, &jittered_vertices).unwrap();
     let indices = glium::index::NoIndices(glium::index::PrimitiveType::Points);
 
     let vertex_shader_src = include_str!("vertex.glsl");
@@ -48,14 +71,30 @@ fn main() {
     )
     .unwrap();
 
+    let aspect_ratio = window.inner_size().height as f32 / window.inner_size().width as f32;
+    let min_dimension = window.inner_size().height.min(window.inner_size().width);
+    let uniforms = uniform! {
+        aspectRatio: aspect_ratio,
+        pointSize: POINT_RADIUS_BEES * min_dimension as f32 / 2.0
+    };
+
     let mut frame = display.draw();
-    frame.clear_color_srgb(0.094,0.098,0.149, 1.0);
+    frame.clear_color_srgb(0.094, 0.098, 0.149, 1.0);
     frame
         .draw(
-            &vertex_buffer,
+            &bee_vertex_buffer,
             &indices,
             &program,
-            &glium::uniforms::EmptyUniforms,
+            &uniforms,
+            &Default::default(),
+        )
+        .unwrap();
+    frame
+        .draw(
+            &jitter_vertex_buffer,
+            &indices,
+            &program,
+            &uniforms,
             &Default::default(),
         )
         .unwrap();
@@ -74,6 +113,6 @@ fn main() {
 
 #[derive(Copy, Clone)]
 struct Vertex {
-    position: [f32; 2],
+    position: [f64; 2],
 }
 implement_vertex!(Vertex, position);
