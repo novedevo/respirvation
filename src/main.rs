@@ -22,14 +22,9 @@ fn main() {
 
     //generate random points
     let mut rng = rand::rng();
-    let normal = rand_distr::Normal::new(0.0, 0.4).unwrap();
     let uniform = Uniform::new(-0.2, 0.2).unwrap();
-    let mut points = normal
-        .sample_iter(rng.clone())
-        .take(100)
-        .collect::<Vec<f64>>();
 
-    points.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    let points = get_biggest_difference(100_000).0;
 
     let mut jittered_vertices = points
         .iter()
